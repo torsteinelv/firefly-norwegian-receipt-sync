@@ -36,7 +36,6 @@ def validate_environment():
 
 def hent_firefly_status():
     url = f"{FIREFLY_URL}/api/v1/transactions"
-    # Økt grensen kraftig for å fange opp historikken fra 2025
     params = {"limit": 1000} 
     
     prosessert_batch_ids = set()
@@ -60,20 +59,18 @@ def hent_firefly_status():
         notes = first_split.get("notes", "")
         bank_ext_id = first_split.get("external_id", "")
         
-        # Vi ser i notat-feltet for å finne ut om VI har fikset den
         trumf_match = re.search(r"Trumf-batch:\s*(\d+)", notes) if notes else None
         
         if trumf_match:
             prosessert_batch_ids.add(trumf_match.group(1))
         elif len(splits) == 1 and first_split.get("type") == "withdrawal":
-            # Hvis den ikke har "Trumf-batch:" i notatene, og bare er 1 linje, er det banken!
             ubehandlede_bank_transaksjoner.append({
                 "group_id": group_id,
                 "amount": float(first_split["amount"]),
                 "date": first_split["date"][:10],
                 "description": first_split["description"],
                 "destination_name": first_split.get("destination_name", "Ukjent butikk"),
-                "external_id": bank_ext_id # Beholder bankens ID i minnet!
+                "external_id": bank_ext_id 
             })
             
     return prosessert_batch_ids, ubehandlede_bank_transaksjoner
@@ -121,7 +118,6 @@ def run_sync_process():
         splits = []
         sub_sum = 0.0
         
-        # Vi må ta vare på bankens ID, hvis den finnes
         bank_ext_id = match.get("external_id")
         
         for i, vare in enumerate(vare_linjer):
@@ -129,7 +125,6 @@ def run_sync_process():
             sub_sum += amount
             qty_prefix = f"{vare['quantity']}x " if 'quantity' in vare else ""
             
-            # Vi skriver batch_id inn i notatfeltet på den første varen i kvitteringen
             split_note = f"{qty_prefix}{vare['name']}"
             if i == 0:
                 split_note = f"Trumf-batch: {r['batch_id']} | " + split_note
@@ -145,7 +140,6 @@ def run_sync_process():
                 "notes": split_note
             }
             
-            # Putt bankens ID på første split så bank-synken gjenkjenner den neste gang
             if i == 0 and bank_ext_id:
                 split_obj["external_id"] = bank_ext_id
                 
@@ -165,7 +159,7 @@ def run_sync_process():
             })
             
         payload = {
-            "group_title": f"Kvittering: {r['payee']}", # 🔥 Dette er fiksen!
+            "group_title": match['description'],  # 🔥 Her bruker vi det originale navnet fra banken!
             "apply_rules": True,
             "fire_webhooks": True,
             "transactions": splits
