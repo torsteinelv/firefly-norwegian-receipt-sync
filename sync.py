@@ -165,6 +165,7 @@ def run_sync_process():
             })
             
         payload = {
+            "group_title": f"Kvittering: {r['payee']}", # 🔥 Dette er fiksen!
             "apply_rules": True,
             "fire_webhooks": True,
             "transactions": splits
