@@ -14,8 +14,11 @@ client = OpenAI(base_url=base_url, api_key=api_key)
 CACHE_FILE = "vare_cache.json"
 
 if os.path.exists(CACHE_FILE):
-    with open(CACHE_FILE, "r", encoding="utf-8") as f:
-        local_cache = json.load(f)
+    try:
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            local_cache = json.load(f)
+    except json.JSONDecodeError:
+        local_cache = {}
 else:
     local_cache = {}
 
@@ -62,8 +65,9 @@ def kategoriser_varer_med_llm(vareliste, gyldige_kategorier):
         print(f"⚠️ LLM feilet: {e}")
         return {vare: "Dagligvarer" for vare in vareliste}
 
-def splitt_kvittering_til_actual(items, gyldige_kategorier):
+def splitt_kvittering_til_actual(items, gyldige_kategorier, firefly_cache=None):
     if not items: return []
+    if firefly_cache is None: firefly_cache = {}
 
     kategoriserte_linjer = []
     varer_som_maa_sjekkes = []
@@ -71,14 +75,20 @@ def splitt_kvittering_til_actual(items, gyldige_kategorier):
 
     for item in items:
         varenavn = item["name"]
-        if varenavn in local_cache:
+        
+        # 1. Fasit: Sjekk hva Firefly III mener (hvis du har endret det manuelt)
+        if varenavn in firefly_cache:
+            kategori_kart[varenavn] = firefly_cache[varenavn]
+        # 2. Hukommelse: Sjekk vår lokale fil
+        elif varenavn in local_cache:
             kategori_kart[varenavn] = local_cache[varenavn]
+        # 3. Helt ukjent: Spør LLM
         else:
             varer_som_maa_sjekkes.append(varenavn)
 
     if varer_som_maa_sjekkes:
         unike_nye = list(set(varer_som_maa_sjekkes))
-        print(f"🧠 Spør lokal LLM om {len(unike_nye)} nye varer...")
+        print(f"🧠 Spør lokal LLM om {len(unike_nye)} helt nye varer...")
         llm_svar = kategoriser_varer_med_llm(unike_nye, gyldige_kategorier)
         kategori_kart.update(llm_svar)
         local_cache.update(llm_svar)
