@@ -1,0 +1,19 @@
+version: '3.8'
+services:
+  sync-konto-1:
+    image: ghcr.io/torsteinelv/firefly-norwegian-receipt-sync:latest
+    container_name: firefly-receipt-sync-1
+    restart: unless-stopped
+    env_file:
+      - .env.konto1
+    volumes:
+      - ./vare_cache.json:/app/vare_cache.json
+
+  sync-konto-2:
+    image: ghcr.io/torsteinelv/firefly-norwegian-receipt-sync:latest
+    container_name: firefly-receipt-sync-2
+    restart: unless-stopped
+    env_file:
+      - .env.konto2
+    volumes:
+      - ./vare_cache.json:/app/vare_cache.json
