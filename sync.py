@@ -40,6 +40,7 @@ def hent_firefly_status():
     
     prosessert_batch_ids = set()
     ubehandlede_bank_transaksjoner = []
+    firefly_vare_cache = {} # 🔥 Nyhet: Vi lagrer alle tidligere varer her!
     
     res = requests.get(url, headers=headers, params=params, timeout=10)
     res.raise_for_status()
@@ -63,6 +64,14 @@ def hent_firefly_status():
         
         if trumf_match:
             prosessert_batch_ids.add(trumf_match.group(1))
+            
+            # 🔥 LÆR FRA FIREFLY: Vi ser igjennom de tidligere splittene
+            for split in splits:
+                varenavn = split.get("description")
+                kategori = split.get("category_name")
+                if varenavn and kategori and varenavn != "Rabatter / Pant / Avrunding":
+                    firefly_vare_cache[varenavn] = kategori
+                    
         elif len(splits) == 1 and first_split.get("type") == "withdrawal":
             ubehandlede_bank_transaksjoner.append({
                 "group_id": group_id,
@@ -73,7 +82,7 @@ def hent_firefly_status():
                 "external_id": bank_ext_id 
             })
             
-    return prosessert_batch_ids, ubehandlede_bank_transaksjoner
+    return prosessert_batch_ids, ubehandlede_bank_transaksjoner, firefly_vare_cache
 
 def finn_matchende_banktransaksjon(kvittering_dato, kvittering_belop, ubehandlede_txs):
     q_dato = datetime.datetime.strptime(kvittering_dato, "%Y-%m-%d").date()
@@ -90,9 +99,10 @@ def run_sync_process():
     validate_environment()
     
     print(f"🔌 Kobler til Firefly III for å lese bankstatus ({SOURCE_ACCOUNT})...")
-    prosessert_ids, ubehandlede_txs = hent_firefly_status()
+    prosessert_ids, ubehandlede_txs, firefly_cache = hent_firefly_status()
     print(f"🔍 Fant {len(prosessert_ids)} allerede ferdige Trumf-turer.")
     print(f"🏦 Fant {len(ubehandlede_txs)} potensielle nye bank-transaksjoner å matche mot.")
+    print(f"🧠 Firefly-fasit har lært {len(firefly_cache)} varer fra historikken din!")
     
     alle_kvitteringer = fetch_trumf_data(skip_ids=prosessert_ids)
     alle_kvitteringer.sort(key=lambda x: x['date'])
@@ -114,7 +124,8 @@ def run_sync_process():
             
         print(f"   🎯 MATCH FUNNET i banken! Oppdaterer (Bankdato: {match['date']})")
         
-        vare_linjer = splitt_kvittering_til_actual(r['items'], standard_kategorier)
+        # 🔥 Sender Firefly-cachen inn til LLM-skriptet
+        vare_linjer = splitt_kvittering_til_actual(r['items'], standard_kategorier, firefly_cache)
         splits = []
         sub_sum = 0.0
         
@@ -159,7 +170,7 @@ def run_sync_process():
             })
             
         payload = {
-            "group_title": match['description'],  # 🔥 Her bruker vi det originale navnet fra banken!
+            "group_title": match['description'], 
             "apply_rules": True,
             "fire_webhooks": True,
             "transactions": splits
@@ -173,6 +184,10 @@ def run_sync_process():
             oppdaterte_turer += 1
             prosessert_ids.add(r['batch_id'])
             ubehandlede_txs = [tx for tx in ubehandlede_txs if tx['group_id'] != match['group_id']]
+            
+            # 🔥 LÆR MED EN GANG: Oppdaterer cachen i sanntid så neste kvittering slipper å spørre LLM
+            for vare in vare_linjer:
+                firefly_cache[vare['name']] = vare['category']
             
         except Exception as e:
             print(f"❌ Kunne ikke oppdatere banktransaksjon i Firefly: {e}")
