@@ -1,6 +1,7 @@
 import os
 import sys
 import datetime
+import re
 import requests
 from dotenv import load_dotenv
 
@@ -35,7 +36,8 @@ def validate_environment():
 
 def hent_firefly_status():
     url = f"{FIREFLY_URL}/api/v1/transactions"
-    params = {"limit": 1500} 
+    # Økt grensen kraftig for å fange opp historikken fra 2025
+    params = {"limit": 1000} 
     
     prosessert_batch_ids = set()
     ubehandlede_bank_transaksjoner = []
@@ -55,17 +57,23 @@ def hent_firefly_status():
         if first_split.get("source_name") != SOURCE_ACCOUNT:
             continue
             
-        ext_id = first_split.get("external_id")
+        notes = first_split.get("notes", "")
+        bank_ext_id = first_split.get("external_id", "")
         
-        if ext_id:
-            prosessert_batch_ids.add(str(ext_id))
+        # Vi ser i notat-feltet for å finne ut om VI har fikset den
+        trumf_match = re.search(r"Trumf-batch:\s*(\d+)", notes) if notes else None
+        
+        if trumf_match:
+            prosessert_batch_ids.add(trumf_match.group(1))
         elif len(splits) == 1 and first_split.get("type") == "withdrawal":
+            # Hvis den ikke har "Trumf-batch:" i notatene, og bare er 1 linje, er det banken!
             ubehandlede_bank_transaksjoner.append({
                 "group_id": group_id,
                 "amount": float(first_split["amount"]),
                 "date": first_split["date"][:10],
                 "description": first_split["description"],
-                "destination_name": first_split["destination_name"]
+                "destination_name": first_split.get("destination_name", "Ukjent butikk"),
+                "external_id": bank_ext_id # Beholder bankens ID i minnet!
             })
             
     return prosessert_batch_ids, ubehandlede_bank_transaksjoner
@@ -107,18 +115,26 @@ def run_sync_process():
             print(f"   ⏳ Ingen match i banken ennå. Venter til bank-synken får hentet denne!")
             continue
             
-        print(f"   🎯 MATCH FUNNET i banken! Oppdaterer...")
+        print(f"   🎯 MATCH FUNNET i banken! Oppdaterer (Bankdato: {match['date']})")
         
         vare_linjer = splitt_kvittering_til_actual(r['items'], standard_kategorier)
         splits = []
         sub_sum = 0.0
         
-        for vare in vare_linjer:
+        # Vi må ta vare på bankens ID, hvis den finnes
+        bank_ext_id = match.get("external_id")
+        
+        for i, vare in enumerate(vare_linjer):
             amount = float(vare['amount'])
             sub_sum += amount
             qty_prefix = f"{vare['quantity']}x " if 'quantity' in vare else ""
             
-            splits.append({
+            # Vi skriver batch_id inn i notatfeltet på den første varen i kvitteringen
+            split_note = f"{qty_prefix}{vare['name']}"
+            if i == 0:
+                split_note = f"Trumf-batch: {r['batch_id']} | " + split_note
+            
+            split_obj = {
                 "type": "withdrawal",
                 "date": f"{r['date']}T12:00:00+01:00",
                 "amount": f"{amount:.2f}",
@@ -126,9 +142,14 @@ def run_sync_process():
                 "source_name": SOURCE_ACCOUNT,
                 "destination_name": r['payee'],
                 "category_name": vare['category'],
-                "notes": f"{qty_prefix}{vare['name']}",
-                "external_id": r['batch_id']
-            })
+                "notes": split_note
+            }
+            
+            # Putt bankens ID på første split så bank-synken gjenkjenner den neste gang
+            if i == 0 and bank_ext_id:
+                split_obj["external_id"] = bank_ext_id
+                
+            splits.append(split_obj)
             
         diff = float(r['amount']) - sub_sum
         if abs(diff) > 0.01:
@@ -140,8 +161,7 @@ def run_sync_process():
                 "source_name": SOURCE_ACCOUNT,
                 "destination_name": r['payee'],
                 "category_name": "Matvarer",
-                "notes": "Automatisert justering",
-                "external_id": r['batch_id']
+                "notes": "Automatisert justering"
             })
             
         payload = {
