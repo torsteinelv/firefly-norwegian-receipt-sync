@@ -35,7 +35,7 @@ def validate_environment():
 
 def hent_firefly_status():
     url = f"{FIREFLY_URL}/api/v1/transactions"
-    params = {"limit": 150} 
+    params = {"limit": 1500} 
     
     prosessert_batch_ids = set()
     ubehandlede_bank_transaksjoner = []
