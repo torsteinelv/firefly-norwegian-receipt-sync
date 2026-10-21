@@ -1,6 +1,8 @@
 import os
 import requests
 
+from tokenstore import hent_token, lagre_token
+
 API_BASE = "https://api.coop.no"
 ISSUER = "https://login.coop.no/"
 # Auth0 sin standard token-endepunkt-konvensjon ({issuer}oauth/token) - IKKE
@@ -65,7 +67,8 @@ def fetch_coop_data(skip_ids=None):
     if skip_ids is None:
         skip_ids = set()
 
-    refresh_token = os.getenv("COOP_REFRESH_TOKEN")
+    fra_env = os.getenv("COOP_REFRESH_TOKEN")
+    refresh_token = hent_token("coop", fra_env) if fra_env else None
     if not refresh_token:
         print("ℹ️ COOP_REFRESH_TOKEN ikke satt, hopper over Coop.")
         return []
@@ -74,6 +77,9 @@ def fetch_coop_data(skip_ids=None):
     try:
         token_data = _refresh_access_token(refresh_token)
         access_token = token_data["access_token"]
+        ny = token_data.get("refresh_token")
+        if ny and ny != refresh_token:
+            lagre_token("coop", fra_env, ny)
     except Exception as e:
         print(f"❌ Kunne ikke fornye Coop-token (COOP_REFRESH_TOKEN kan være utløpt, ev. krever ny BankID-SCA - kjør bootstrap_oauth.py på nytt): {e}")
         raise
