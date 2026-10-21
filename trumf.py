@@ -64,8 +64,8 @@ def fetch_trumf_data(skip_ids=None):
             print("❌ Fant ingen Trumf-kvitteringer på siden. TRUMF_TOKEN er trolig utløpt - legg inn ny cookie.")
             tittel = re.search(r"<title>([^<]{0,80})", res.text)
             print(f"   Diagnose: status={res.status_code}, url={res.url}, {len(res.text)} tegn, "
-                  f"tittel={tittel.group(1) if tittel else None!r}, batchId x{res.text.count("batchId")}, "
-                  f"kvittering x{res.text.lower().count("kvittering")}")
+                  f"tittel={tittel.group(1) if tittel else None!r}, batchId x{res.text.count('batchId')}, "
+                  f"kvittering x{res.text.lower().count('kvittering')}")
             raise RuntimeError("ingen Trumf-kvitteringer funnet (utløpt cookie?)")
         
         receipts = []
