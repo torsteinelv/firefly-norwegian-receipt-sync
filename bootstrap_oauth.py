@@ -71,6 +71,7 @@ def main():
         sys.exit(1)
 
     verifier, challenge = make_pkce_pair()
+    state = secrets.token_urlsafe(16)  # Rema avviser forespørselen (invalid_request) uten state
 
     params = {
         "response_type": "code",
@@ -79,6 +80,7 @@ def main():
         "scope": cfg["scope"],
         "code_challenge": challenge,
         "code_challenge_method": "S256",
+        "state": state,
     }
     auth_url = f"{cfg['auth_url']}?{urllib.parse.urlencode(params)}"
 
@@ -91,6 +93,12 @@ def main():
     parsed = urllib.parse.urlparse(redirected_url)
     query = urllib.parse.parse_qs(parsed.query)
     code = query.get("code", [None])[0]
+    if query.get("error"):
+        print(f"❌ Innloggingen ble avvist: {query['error'][0]} - {query.get('error_description', [''])[0]}")
+        sys.exit(1)
+    if query.get("state", [None])[0] != state:
+        print("❌ state i URL-en stemmer ikke med den vi sendte. Start på nytt og lim inn URL-en fra DEN innloggingen.")
+        sys.exit(1)
     if not code:
         print("❌ Fant ingen 'code'-parameter i URL-en du limte inn.")
         sys.exit(1)
