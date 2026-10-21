@@ -40,17 +40,25 @@ def validate_environment():
 
 def hent_firefly_status():
     url = f"{FIREFLY_URL}/api/v1/transactions"
-    params = {"limit": 1000}
+    params = {"limit": 1000, "page": 1}
 
     prosessert_batch_ids = set()
     ubehandlede_bank_transaksjoner = []
     firefly_vare_cache = {}  # 🔥 Vi lagrer alle tidligere varer her!
 
-    res = requests.get(url, headers=headers, params=params, timeout=10)
-    res.raise_for_status()
-    data = res.json()
+    # Alle sider, ikke bare de 1000 nyeste - ellers glemmer vi eldre ferdige turer.
+    alle_grupper = []
+    while True:
+        res = requests.get(url, headers=headers, params=params, timeout=30)
+        res.raise_for_status()
+        data = res.json()
+        alle_grupper.extend(data.get("data", []))
+        pag = data.get("meta", {}).get("pagination", {})
+        if params["page"] >= pag.get("total_pages", 1):
+            break
+        params["page"] += 1
 
-    for tx_group in data.get("data", []):
+    for tx_group in alle_grupper:
         group_id = tx_group["id"]
         attributes = tx_group.get("attributes", {})
         splits = attributes.get("transactions", [])
@@ -67,10 +75,12 @@ def hent_firefly_status():
         # Generisk "Batch: <kilde>-<id>" - matcher trumf-/rema-/coop-batcher
         # med samme regex, siden kilden allerede er kodet inn i selve
         # batch-ID-en (se merge_and_prefix_batch_ids under).
-        batch_match = re.search(r"Batch:\s*(\S+)", notes) if notes else None
+        # Gamle notater fra før #7 heter "Trumf-batch: 260315" (uten prefiks).
+        batch_match = re.search(r"(Trumf-batch|Batch):\s*(\S+)", notes) if notes else None
 
         if batch_match:
-            prosessert_batch_ids.add(batch_match.group(1))
+            bid = batch_match.group(2)
+            prosessert_batch_ids.add(f"trumf-{bid}" if batch_match.group(1) == "Trumf-batch" else bid)
 
             # 🔥 LÆR FRA FIREFLY: Vi ser igjennom de tidligere splittene
             for split in splits:

@@ -59,6 +59,10 @@ def fetch_trumf_data(skip_ids=None):
         clean_text = res.text.replace('\\"', '"')
         pattern = r'"batchId":"(\d+)","belop":([0-9.]+),"beskrivelse":"([^"]+)"'
         matches = list(re.finditer(pattern, clean_text))
+        if not matches:
+            # Utløpt cookie gir innloggingssiden med 200 OK - feil høyt i stedet for "ingen nye".
+            print("❌ Fant ingen Trumf-kvitteringer på siden. TRUMF_TOKEN er trolig utløpt - legg inn ny cookie.")
+            raise SystemExit(1)
         
         receipts = []
         seen_ids = set()
