@@ -12,12 +12,12 @@ Begge er reverse-engineert fra Android-appene, se
 https://helgesver.re/articles/reverse-engineering-norwegian-grocery-apps -
 IKKE offisielt støttede innloggingsflyter, kan slutte å virke uten varsel.
 
-Coop-spesifikt: redirect_uri er et mobil-app-scheme
-(no.coop.members://auth/callback), som ikke fanges opp av en vanlig
-skrivebords-nettleser. Etter innlogging vil nettleseren vise en feilside
-("kan ikke åpne siden") - koden ligger i URL-en i adressefeltet der
-("...callback?code=XXXX&..."), lim inn HELE den URL-en når scriptet spør,
-ikke bare koden.
+Coop-spesifikt: klient-id, redirect-adresse og evt. audience oppgis som miljøvariabler
+(COOP_CLIENT_ID, COOP_REDIRECT_URI, COOP_AUDIENCE) når du logger inn, de ligger ikke i repoet.
+Standard redirect er et mobil-app-scheme (no.coop.members://auth/callback), som ikke fanges
+opp av en vanlig nettleser: etter innlogging vises en feilside, men koden ligger i adressen
+("...callback?code=XXXX&..."). Lim inn HELE adressen når scriptet spør, ikke bare koden.
+Bruker du nettsidens klient, bruk et privat vindu så nettsiden ikke bruker opp koden først.
 """
 
 import base64
@@ -40,12 +40,14 @@ PROVIDERS = {
     "coop": {
         "auth_url": "https://login.coop.no/authorize",
         "token_url": "https://login.coop.no/oauth/token",
-        # Client ID ikke funnet i kildematerialet - må fylles inn manuelt,
-        # se .env.example / README.md for hvordan finne den (proxy appens
-        # trafikk, f.eks. med mitmproxy, én gang).
+        # Ingen faste verdier for klienten i repoet: oppgi dem når du logger inn.
+        #   COOP_CLIENT_ID     (påkrevd) klientens id
+        #   COOP_REDIRECT_URI  (valgfri) må være en adresse klienten tillater
+        #   COOP_AUDIENCE      (valgfri) sendes som audience hvis satt
         "client_id": os.getenv("COOP_CLIENT_ID", ""),
-        "redirect_uri": "no.coop.members://auth/callback",
+        "redirect_uri": os.getenv("COOP_REDIRECT_URI", "no.coop.members://auth/callback"),
         "scope": "openid profile offline_access email phone address",
+        "extra": {"audience": os.getenv("COOP_AUDIENCE")} if os.getenv("COOP_AUDIENCE") else {},
     },
 }
 
@@ -67,7 +69,7 @@ def main():
     cfg = PROVIDERS[provider]
 
     if provider == "coop" and not cfg["client_id"]:
-        print("❌ COOP_CLIENT_ID er ikke satt (se docstring øverst i fila).")
+        print("❌ COOP_CLIENT_ID er ikke satt. Eksempel: COOP_CLIENT_ID=... COOP_REDIRECT_URI=... python bootstrap_oauth.py coop")
         sys.exit(1)
 
     verifier, challenge = make_pkce_pair()
@@ -81,6 +83,7 @@ def main():
         "code_challenge": challenge,
         "code_challenge_method": "S256",
         "state": state,
+        **cfg.get("extra", {}),
     }
     auth_url = f"{cfg['auth_url']}?{urllib.parse.urlencode(params)}"
 
