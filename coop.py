@@ -89,8 +89,11 @@ def fetch_coop_data(skip_ids=None):
 
     try:
         res = requests.get(url, headers=headers, timeout=15)
+        if res.status_code >= 400:
+            print(f"❌ Coop {url} svarte {res.status_code}: {res.text[:300]!r}")
         res.raise_for_status()
         purchases = res.json()
+        print(f"   Coop: svar med {len(res.content)} byte, toppnøkler: {list(purchases)[:8] if isinstance(purchases, dict) else type(purchases).__name__}")
 
         receipts = []
         for p in purchases.get("purchases", purchases if isinstance(purchases, list) else []):

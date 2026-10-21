@@ -91,6 +91,7 @@ def fetch_rema_data(skip_ids=None):
         res = requests.get(url, headers=headers, timeout=15)
         res.raise_for_status()
         heads = res.json()
+        print(f"   Rema: svar med {len(res.content)} byte, toppnøkler: {list(heads)[:8] if isinstance(heads, dict) else type(heads).__name__}")
 
         receipts = []
         for head in heads.get("heads", heads if isinstance(heads, list) else []):
