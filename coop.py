@@ -91,6 +91,10 @@ def fetch_coop_data(skip_ids=None):
         res = requests.get(url, headers=headers, timeout=15)
         if res.status_code >= 400:
             print(f"❌ Coop {url} svarte {res.status_code}: {res.text[:300]!r}")
+            # Sjekk om selve tokenen godtas på andre kjente stier (bare statuskoder).
+            for sti in ("/user/profile", "/user/pay/history/dashboard", "/user/pay/history/month"):
+                r2 = requests.get(f"{API_BASE}{sti}", headers=headers, timeout=15)
+                print(f"   probe {sti}: {r2.status_code}")
         res.raise_for_status()
         purchases = res.json()
         print(f"   Coop: svar med {len(res.content)} byte, toppnøkler: {list(purchases)[:8] if isinstance(purchases, dict) else type(purchases).__name__}")
