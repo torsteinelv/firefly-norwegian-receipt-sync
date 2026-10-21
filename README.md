@@ -28,8 +28,32 @@ sendes IKKE `category_name` med i det hele tatt - transaksjonen opprettes
 med `apply_rules: true`, så **Firefly sitt eget regelverk** kategoriserer
 den, basert på `description` (varenavnet).
 
-Kjør `export_categories_to_rules.py` for å bygge et startsett med regler fra
-det du allerede har i `vare_cache.json`.
+### Regler: slik kommer du i gang
+
+1. `python varer_rapport.py` skriver `varer.csv` med alle unike varer, størst forbruk først,
+   og viser hvor mange prosent av kronebeløpet som mangler kategori.
+2. Legg manglende ord i `regler.json` (bruk entydige ord, for eksempel finnes "OST" i mange andre navn).
+3. `python apply_rules.py` (tørrkjøring), deretter `python apply_rules.py --apply`.
+4. I Firefly: Regler > gruppen > *Kjør på eksisterende*. Gjenta 1-4 til andelen uten kategori er lav.
+
+Rekkefølgen i `regler.json` teller: første regel som treffer stopper resten.
+
+### Ukestatistikk (Grafana mot Firefly-databasen)
+
+```sql
+SELECT date_trunc('week', tj.date) AS time,
+       COALESCE(c.name, 'Uten kategori') AS kategori,
+       SUM(ABS(t.amount)) AS kroner
+FROM transaction_journals tj
+JOIN transactions t ON t.transaction_journal_id = tj.id AND t.amount < 0
+LEFT JOIN category_transaction_journal ctj ON ctj.transaction_journal_id = tj.id
+LEFT JOIN categories c ON c.id = ctj.category_id
+WHERE tj.deleted_at IS NULL AND t.deleted_at IS NULL
+  AND tj.transaction_type_id = (SELECT id FROM transaction_types WHERE type = 'Withdrawal')
+  AND $__timeFilter(tj.date)
+GROUP BY 1, 2 ORDER BY 1;
+```
+Ikke testet. Firefly har også egne rapporter og diagrammer (Rapporter > velg uke/periode).
 
 ## Oppsett
 
