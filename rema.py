@@ -54,6 +54,7 @@ def _fetch_rema_items(transaction_id, headers):
         for row in rows.get("rows", rows if isinstance(rows, list) else []):
             items.append({
                 "name": row.get("prodtxt1", "Ukjent vare"),
+                "ean": row.get("prodtxt3"),
                 "quantity": float(row.get("quantity", 1)),
                 "amount": float(row.get("amount", 0)),
             })

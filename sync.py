@@ -179,6 +179,8 @@ def run_sync_process():
             qty_prefix = f"{vare['quantity']}x " if 'quantity' in vare else ""
 
             split_note = f"{qty_prefix}{vare['name']}"
+            if vare.get("ean"):
+                split_note += f" | EAN {vare['ean']}"
             if i == 0:
                 split_note = f"Batch: {r['batch_id']} | " + split_note
 
@@ -225,7 +227,7 @@ def run_sync_process():
 
         try:
             tx_url = f"{FIREFLY_URL}/api/v1/transactions/{match['group_id']}"
-            res = requests.put(tx_url, headers=headers, json=payload, timeout=15)
+            res = requests.put(tx_url, headers=headers, json=payload, timeout=60)
             res.raise_for_status()
             print(f"   ✅ Banktransaksjonen ble oppdatert og splittet med varelinjer!")
             oppdaterte_turer += 1
@@ -238,7 +240,8 @@ def run_sync_process():
 
         except Exception as e:
             print(f"❌ Kunne ikke oppdatere banktransaksjon i Firefly: {e}")
-            if 'res' in locals(): print(f"Svar fra server: {res.text}")
+            if getattr(e, "response", None) is not None:
+                print(f"Svar fra server: {e.response.text[:300]}")
 
     if oppdaterte_turer == 0:
         print("\nℹ️ Ingen nye kvitteringer ble oppdatert.")

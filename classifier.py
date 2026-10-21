@@ -41,6 +41,7 @@ def splitt_kvittering_til_actual(items, firefly_cache=None):
             "amount": item["amount"],
             "category": kategori,
             "quantity": item.get("quantity", 1),
+            "ean": item.get("ean"),
         })
 
     return kategoriserte_linjer
