@@ -76,7 +76,7 @@ def fetch_rema_data(skip_ids=None):
         access_token = token_data["access_token"]
     except Exception as e:
         print(f"❌ Kunne ikke fornye Rema-token (REMA_REFRESH_TOKEN kan være utløpt - kjør bootstrap_oauth.py på nytt): {e}")
-        return []
+        raise
 
     headers = _headers(access_token)
     url = f"{API_BASE}/v1/bella/transaction/v2/heads"
@@ -123,4 +123,4 @@ def fetch_rema_data(skip_ids=None):
         return receipts
     except Exception as e:
         print(f"❌ Feil ved henting av Rema-data: {e}")
-        return []
+        raise

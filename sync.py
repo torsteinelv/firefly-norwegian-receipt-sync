@@ -120,15 +120,23 @@ def hent_alle_kvitteringer(skip_ids):
     den allerede fungerende koden) slik at alle tre kildene har samme
     "<kilde>-<id>"-format som rema.py/coop.py allerede produserer selv."""
     alle = []
+    feilet = []
 
-    for r in fetch_trumf_data(skip_ids={bid[len("trumf-"):] for bid in skip_ids if bid.startswith("trumf-")}):
-        r["batch_id"] = f"trumf-{r['batch_id']}"
-        alle.append(r)
+    # En kilde som feiler skal ikke stoppe de andre, men jobben skal til slutt
+    # feile (exit 1) slik at CronJob-en vises som mislykket og ikke som "ingen nye".
+    try:
+        for r in fetch_trumf_data(skip_ids={bid[len("trumf-"):] for bid in skip_ids if bid.startswith("trumf-")}):
+            r["batch_id"] = f"trumf-{r['batch_id']}"
+            alle.append(r)
+    except Exception:
+        feilet.append("Trumf")
+    for navn, hent in (("Rema", fetch_rema_data), ("Coop", fetch_coop_data)):
+        try:
+            alle.extend(hent(skip_ids=skip_ids))
+        except Exception:
+            feilet.append(navn)
 
-    alle.extend(fetch_rema_data(skip_ids=skip_ids))
-    alle.extend(fetch_coop_data(skip_ids=skip_ids))
-
-    return alle
+    return alle, feilet
 
 
 def run_sync_process():
@@ -140,7 +148,7 @@ def run_sync_process():
     print(f"🏦 Fant {len(ubehandlede_txs)} potensielle nye bank-transaksjoner å matche mot.")
     print(f"🧠 Firefly-fasit har lært {len(firefly_cache)} varer fra historikken din!")
 
-    alle_kvitteringer = hent_alle_kvitteringer(skip_ids=prosessert_ids)
+    alle_kvitteringer, feilet = hent_alle_kvitteringer(skip_ids=prosessert_ids)
     alle_kvitteringer.sort(key=lambda x: x['date'])
 
     oppdaterte_turer = 0
@@ -234,6 +242,10 @@ def run_sync_process():
 
     if oppdaterte_turer == 0:
         print("\nℹ️ Ingen nye kvitteringer ble oppdatert.")
+
+    if feilet:
+        print(f"\n❌ Disse kildene feilet: {', '.join(feilet)}. Se meldingene over.")
+        sys.exit(1)
 
 
 def job():

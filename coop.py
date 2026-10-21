@@ -76,7 +76,7 @@ def fetch_coop_data(skip_ids=None):
         access_token = token_data["access_token"]
     except Exception as e:
         print(f"❌ Kunne ikke fornye Coop-token (COOP_REFRESH_TOKEN kan være utløpt, ev. krever ny BankID-SCA - kjør bootstrap_oauth.py på nytt): {e}")
-        return []
+        raise
 
     headers = _headers(access_token)
     url = f"{API_BASE}/user/pay/history/list"
@@ -117,4 +117,4 @@ def fetch_coop_data(skip_ids=None):
         return receipts
     except Exception as e:
         print(f"❌ Feil ved henting av Coop-data: {e}")
-        return []
+        raise

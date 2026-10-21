@@ -62,7 +62,7 @@ def fetch_trumf_data(skip_ids=None):
         if not matches:
             # Utløpt cookie gir innloggingssiden med 200 OK - feil høyt i stedet for "ingen nye".
             print("❌ Fant ingen Trumf-kvitteringer på siden. TRUMF_TOKEN er trolig utløpt - legg inn ny cookie.")
-            raise SystemExit(1)
+            raise RuntimeError("ingen Trumf-kvitteringer funnet (utløpt cookie?)")
         
         receipts = []
         seen_ids = set()
@@ -98,4 +98,4 @@ def fetch_trumf_data(skip_ids=None):
         return receipts
     except Exception as e:
         print(f"❌ Feil ved henting av Trumf-data: {e}")
-        return []
+        raise
