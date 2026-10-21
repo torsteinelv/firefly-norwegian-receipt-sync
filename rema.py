@@ -94,7 +94,9 @@ def fetch_rema_data(skip_ids=None):
         print(f"   Rema: svar med {len(res.content)} byte, toppnøkler: {list(heads)[:8] if isinstance(heads, dict) else type(heads).__name__}")
 
         receipts = []
-        for head in heads.get("heads", heads if isinstance(heads, list) else []):
+        # API-et returnerer {"transactions": [...]} (eldre kilder skriver "heads").
+        liste = heads if isinstance(heads, list) else heads.get("transactions", heads.get("heads", []))
+        for head in liste:
             batch_id = f"rema-{head.get('id')}"
             purchase_ms = head.get("purchaseDate")
             date_str = (
