@@ -1,6 +1,8 @@
 import os
 import requests
 
+from tokenstore import hent_token, lagre_token
+
 TOKEN_URL = "https://id.rema.no/token"
 API_BASE = "https://api.rema.no"
 CLIENT_ID = "android-251010"
@@ -65,7 +67,8 @@ def fetch_rema_data(skip_ids=None):
     if skip_ids is None:
         skip_ids = set()
 
-    refresh_token = os.getenv("REMA_REFRESH_TOKEN")
+    fra_env = os.getenv("REMA_REFRESH_TOKEN")
+    refresh_token = hent_token("rema", fra_env) if fra_env else None
     if not refresh_token:
         print("ℹ️ REMA_REFRESH_TOKEN ikke satt, hopper over Rema 1000.")
         return []
@@ -74,6 +77,9 @@ def fetch_rema_data(skip_ids=None):
     try:
         token_data = _refresh_access_token(refresh_token)
         access_token = token_data["access_token"]
+        ny = token_data.get("refresh_token")
+        if ny and ny != refresh_token:
+            lagre_token("rema", fra_env, ny)
     except Exception as e:
         print(f"❌ Kunne ikke fornye Rema-token (REMA_REFRESH_TOKEN kan være utløpt - kjør bootstrap_oauth.py på nytt): {e}")
         raise
