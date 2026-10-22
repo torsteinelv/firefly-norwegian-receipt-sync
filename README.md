@@ -23,15 +23,11 @@ vare. Fjernet - upålitelig nok til at det ikke var verdt kompleksiteten.
 
 Nå: hver vare sjekkes mot (1) Firefly sin egen transaksjonshistorikk (varer
 du/Firefly allerede har kategorisert før), så (2) Kassalapp (`KASSALAPP`-nøkkel;
-EAN-oppslag, ellers navnesøk - hovedkategorien brukes, f.eks. "Meieri & egg"),
-så (3) en lokal cache
-(`vare_cache.json`, på PVC-en i k8s). Finnes den ikke i noen av delene,
-sendes IKKE `category_name` med i det hele tatt - transaksjonen opprettes
-med `apply_rules: true`, så **Firefly sitt eget regelverk** kategoriserer
-den, basert på `description` (varenavnet).
-
-Kjør `export_categories_to_rules.py` for å bygge et startsett med regler fra
-det du allerede har i `vare_cache.json`.
+EAN-oppslag, ellers navnesøk - hovedkategorien brukes, f.eks. "Meieri & egg").
+Finnes den ikke i noen av delene, sendes IKKE `category_name` med i det hele
+tatt - transaksjonen opprettes med `apply_rules: true`, så **Firefly sitt eget
+regelverk** kategoriserer den, basert på `description` (varenavnet).
+Pant/retur og avrundingslinjer får alltid "Pant & rabatter".
 
 ## Oppsett
 

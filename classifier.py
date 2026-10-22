@@ -1,21 +1,10 @@
 import os
-import json
 import time
 
 import requests
 
-CACHE_FILE = "vare_cache.json"
 KASSALAPP_KEY = (os.getenv("KASSALAPP") or "").strip()
 KASSALAPP_URL = "https://kassal.app/api/v1"
-
-if os.path.exists(CACHE_FILE):
-    try:
-        with open(CACHE_FILE, "r", encoding="utf-8") as f:
-            local_cache = json.load(f)
-    except json.JSONDecodeError:
-        local_cache = {}
-else:
-    local_cache = {}
 
 
 def hovedkategori(produkt):
@@ -59,7 +48,7 @@ def splitt_kvittering_til_actual(items, firefly_cache=None):
     """Slår opp kategori for hver vare - ingen LLM lenger.
 
     Rekkefølge: Firefly sin egen historikk (fasit, inkl. manuelle rettelser)
-    -> Kassalapp (EAN/navn) -> lokal cache (gammel LLM-cache) -> None.
+    -> Kassalapp (EAN/navn) -> None.
     None betyr "ukategorisert" - Firefly sitt eget regelverk (apply_rules:
     true i sync.py sitt PUT-kall) kategoriserer varen selv, basert på
     description-feltet (varenavnet).
@@ -74,11 +63,10 @@ def splitt_kvittering_til_actual(items, firefly_cache=None):
         varenavn = item["name"]
 
         if "PANT" in varenavn.upper() or "RETUR" in varenavn.upper():
-            kategori = "Matvarer"
+            kategori = "Pant & rabatter"
         else:
             kategori = (firefly_cache.get(varenavn)
-                        or kassalapp_kategori(varenavn, item.get("ean"))
-                        or local_cache.get(varenavn))
+                        or kassalapp_kategori(varenavn, item.get("ean")))
             if kategori:
                 # Samme vare flere ganger i samme kjøring -> ett oppslag
                 firefly_cache[varenavn] = kategori

@@ -214,7 +214,7 @@ def run_sync_process():
                 "description": "Rabatter / Pant / Avrunding",
                 "source_name": SOURCE_ACCOUNT,
                 "destination_name": r['payee'],
-                "category_name": "Matvarer",
+                "category_name": "Pant & rabatter",
                 "notes": "Automatisert justering"
             })
 
