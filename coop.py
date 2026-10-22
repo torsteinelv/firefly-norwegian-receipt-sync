@@ -3,14 +3,16 @@ import requests
 
 from tokenstore import hent_token, lagre_token
 
-API_BASE = "https://cdcapp.coop.no"
+API_BASE = "https://api.coop.no"
 ISSUER = "https://login.coop.no/"
 # Bekreftet via https://login.coop.no/.well-known/openid-configuration
 # (token_endpoint = https://login.coop.no/oauth/token).
+# API-base: https://api.coop.no (audience i tokenet; cdcapp.coop.no er WAF-blokkert
+# fra datacenter-IP — gir 403 HTML, ikke JSON 401).
 TOKEN_URL = f"{ISSUER}oauth/token"
 
 # Reverse-engineert fra Coop Medlem-appen (Android APK, v4.32.0):
-# - API-base: https://cdcapp.coop.no (kjøpshistorikk under /user/pay/history/*)
+# - API-base: https://api.coop.no (kjøpshistorikk under /user/pay/history/*)
 # - Auth0 PKCE ved login.coop.no; innlogging er vanleg brukarnamn/passord,
 #   IKKE BankID/SCA.
 # COOP_CLIENT_ID er IKKE i appen (sjekket libapp.so) - kjem frå env/secret.
