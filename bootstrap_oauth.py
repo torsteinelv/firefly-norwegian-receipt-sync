@@ -1,8 +1,9 @@
 """Engangs-verktøy for å hente REMA_REFRESH_TOKEN / COOP_REFRESH_TOKEN.
 
 Kjøres LOKALT (ikke i k8s CronJob-en) - krever en nettleser og at DU logger
-inn med din egen konto (BankID for Coop). Skriver ut refresh_token-en på
-slutten; lim den inn i secreten (kubeseal, se README.md).
+inn med din egen konto (vanlig brukarnamn/passord for Coop - IKKE BankID).
+Skriver ut refresh_token-en på slutten; lim den inn i secreten (kubeseal,
+se README.md).
 
 Bruk:
     python bootstrap_oauth.py rema
@@ -12,12 +13,14 @@ Begge er reverse-engineert fra Android-appene, se
 https://helgesver.re/articles/reverse-engineering-norwegian-grocery-apps -
 IKKE offisielt støttede innloggingsflyter, kan slutte å virke uten varsel.
 
-Coop-spesifikt: klient-id, redirect-adresse og evt. audience oppgis som miljøvariabler
+Coop-spesifikt: klient-id, redirect-adresse og audience oppgis som miljøvariabler
 (COOP_CLIENT_ID, COOP_REDIRECT_URI, COOP_AUDIENCE) når du logger inn, de ligger ikke i repoet.
-Standard redirect er et mobil-app-scheme (no.coop.members://auth/callback), som ikke fanges
-opp av en vanlig nettleser: etter innlogging vises en feilside, men koden ligger i adressen
+COOP_CLIENT_ID er IKKE i appen (sjekket libapp.so) - få den én gang ved å proxye
+appens trafikk (mitmproxy) eller fra Coop. Standard redirect er appens registrerte
+Android-URL (https://login.coop.no/android/no.coop.members/callback): et HTTPS-URL
+som nettleseren viser, så koden ligger rett i adressefeltet etter innlogging
 ("...callback?code=XXXX&..."). Lim inn HELE adressen når scriptet spør, ikke bare koden.
-Bruker du nettsidens klient, bruk et privat vindu så nettsiden ikke bruker opp koden først.
+Standard audience er https://api.coop.no.
 """
 
 import base64
@@ -40,14 +43,15 @@ PROVIDERS = {
     "coop": {
         "auth_url": "https://login.coop.no/authorize",
         "token_url": "https://login.coop.no/oauth/token",
-        # Ingen faste verdier for klienten i repoet: oppgi dem når du logger inn.
-        #   COOP_CLIENT_ID     (påkrevd) klientens id
-        #   COOP_REDIRECT_URI  (valgfri) må være en adresse klienten tillater
-        #   COOP_AUDIENCE      (valgfri) sendes som audience hvis satt
+        # COOP_CLIENT_ID (påkrevd) er IKKE i appen - kjem fra env/secret.
+        # Redirect + audience er appens egne verdier (reverse-engineert),
+        # overstilles av COOP_REDIRECT_URI / COOP_AUDIENCE hvis satt.
         "client_id": os.getenv("COOP_CLIENT_ID", ""),
-        "redirect_uri": os.getenv("COOP_REDIRECT_URI", "no.coop.members://auth/callback"),
-        "scope": "openid profile offline_access email phone address",
-        "extra": {"audience": os.getenv("COOP_AUDIENCE")} if os.getenv("COOP_AUDIENCE") else {},
+        "redirect_uri": os.getenv(
+            "COOP_REDIRECT_URI", "https://login.coop.no/android/no.coop.members/callback"
+        ),
+        "scope": "openid profile offline_access",
+        "extra": {"audience": os.getenv("COOP_AUDIENCE", "https://api.coop.no")},
     },
 }
 
