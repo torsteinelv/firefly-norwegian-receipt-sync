@@ -1,71 +1,102 @@
-import datetime
+import json
 import os
 import re
 import time
 
 import requests
 
-# Trumf-nettsiden (Auth.js) henter kvitteringene fra NorgesGruppens API med en
-# token som ligger i /api/auth/session. Vi bruker nettleser-cookien (TRUMF_TOKEN)
-# til å hente den tokenen, og kaller så samme API som nettsiden.
-API = "https://platform-rest-prod.ngdata.no"
-SESSION_URL = "https://www.trumf.no/api/auth/session"
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-FELTER = "dato,beskrivelse,kjedeid,partnerid,batchid,belop,trumf,ekstratrumf,trumfvisa,literbensin,trumftotal"
+# Trumf (NorgesGruppen) — henter kjøpshistorikk ved å scrape RSC-payloaden
+# fra www.trumf.no/trumf-profil/kvitteringer (det gamle REST-API-et
+# platform-rest-prod.ngdata.no/trumf/husstand/… svarer 404, lagt ned ~nov 2025).
+# Auth: session-cookie (TRUMF_TOKEN) kopiert fra en innlogget trumf.no-nettleser.
+BASE = "https://www.trumf.no"
+RECEIPTS_PATH = "/trumf-profil/kvitteringer"
+BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml",
+    "Accept-Language": "nb-NO,nb;q=0.9,en;q=0.8",
+}
 
 
-def _finn_token(obj, sti=""):
-    """Første tekstfelt med 'token' i navnet og lengde > 20: (sti, verdi), ellers None."""
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            if isinstance(v, str) and re.search("token", k, re.I) and len(v) > 20:
-                return f"{sti}.{k}".lstrip("."), v
-            funnet = _finn_token(v, f"{sti}.{k}")
-            if funnet:
-                return funnet
-    elif isinstance(obj, list):
-        for i, v in enumerate(obj):
-            funnet = _finn_token(v, f"{sti}[{i}]")
-            if funnet:
-                return funnet
-    return None
-
-
-def _feltnavn(obj, sti="", ut=None):
-    """Bare feltnavn og typer (aldri verdier) - til feilsøking."""
-    ut = [] if ut is None else ut
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            ut.append(f"{sti}.{k}".lstrip(".") + f":{type(v).__name__}")
-            _feltnavn(v, f"{sti}.{k}", ut)
-    elif isinstance(obj, list) and obj:
-        _feltnavn(obj[0], f"{sti}[]", ut)
-    return ut
-
-
-def _dato(t):
-    batch = str(t.get("batchid", ""))
-    d = str(t.get("dato", ""))[:10]
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", d):
-        return d
-    return f"20{batch[0:2]}-{batch[2:4]}-{batch[4:6]}"
-
-
-def fetch_trumf_items(batch_id, api_headers):
+def _extract_json_after(html, key):
+    """Finn og parse JSON-verdien som følger '<key>\"' i RSC-escaped HTML."""
+    marker = key + r'\"'
+    at = html.find(marker)
+    if at < 0:
+        return None
+    i = at + len(marker)
+    while i < len(html) and html[i] not in ('[', '{'):
+        i += 1
+    if i >= len(html):
+        return None
+    open_ch = html[i]
+    close_ch = ']' if open_ch == '[' else '}'
+    depth = 0
+    in_str = False
+    j = i
+    n = len(html)
+    while j < n:
+        c = html[j]
+        nxt = html[j + 1] if j + 1 < n else ''
+        if c == '\\' and nxt == '"':
+            # RSC flytt: strengar er avgrensa av \" — kvar forekomst slår av/på.
+            in_str = not in_str
+            j += 2
+            continue
+        if c == '\\':
+            # Annan escape (t.d. \\) — hopp over teiknet, endrar ikkje tilstand.
+            j += 2
+            continue
+        if in_str:
+            j += 1
+            continue
+        if c == open_ch:
+            depth += 1
+        elif c == close_ch:
+            depth -= 1
+            if depth == 0:
+                j += 1
+                break
+        j += 1
+    raw = html[i:j]
+    unescaped = raw.replace('\\"', '"').replace('\\\\', '\\').replace('"$D', '"')
     try:
-        res = requests.get(f"{API}/trumf/husstand/transaksjoner/detaljer/{batch_id}",
-                           headers=api_headers, timeout=15)
-        res.raise_for_status()
-        linjer = res.json()
-        if isinstance(linjer, dict):
-            linjer = linjer.get("varer", linjer.get("linjer", []))
+        return json.loads(unescaped)
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+
+def _fetch_page(path, cookie):
+    res = requests.get(
+        BASE + path,
+        headers={**BROWSER_HEADERS, "Cookie": cookie},
+        timeout=30,
+    )
+    res.raise_for_status()
+    return res.text
+
+
+def fetch_trumf_items(batch_id, cookie):
+    try:
+        html = _fetch_page(f"{RECEIPTS_PATH}/{batch_id}", cookie)
+        details = _extract_json_after(html, "purchaseDetails")
+        if not details:
+            return []
         items = []
-        for d in linjer:
+        for line in details.get("varelinjer", []):
+            name = (line.get("produktBeskrivelse") or "").strip()
+            qty = float(line.get("antall", 1) or 1)
+            amt = float(line.get("belop", 0) or 0)
+            if not name or qty <= 0:
+                continue
+            ean = str(line.get("ean") or "")
             items.append({
-                "name": d.get("vareTekst") or d.get("produktBeskrivelse") or "Ukjent vare",
-                "quantity": float(d.get("antall", 1) or 1),
-                "amount": float(d.get("belop", 0) or 0),
-                "ean": d.get("ean"),
+                "name": name,
+                "quantity": qty,
+                "amount": amt,
+                # Trumf gir ikke lenger EAN (alt "$undefined" fra sept 2026)
+                "ean": ean if re.fullmatch(r"\d{8,14}", ean) else None,
             })
         return items
     except Exception as e:
@@ -84,55 +115,36 @@ def fetch_trumf_data(skip_ids=None):
 
     print("🛒 Henter transaksjoner fra Trumf (Kiwi/Meny/Spar)...")
     try:
-        res = requests.get(SESSION_URL, headers={"User-Agent": UA, "Cookie": cookie}, timeout=15)
-        res.raise_for_status()
-        sesjon = res.json()
+        html = _fetch_page(RECEIPTS_PATH, cookie)
     except Exception as e:
-        print(f"❌ Kunne ikke hente Trumf-sesjon: {e}")
+        print(f"❌ Kunne ikke laste Trumf-siden: {e}")
         raise
 
-    funnet = _finn_token(sesjon)
-    if not funnet:
-        print(f"❌ Ingen token i {SESSION_URL} (cookie utløpt, eller tokenen ligger et annet sted).")
-        print(f"   Diagnose: status={res.status_code}, felter i svaret: {_feltnavn(sesjon)[:30]}")
-        raise RuntimeError("ingen Trumf-token i sesjonen")
-    sti, token = funnet
-    print(f"   Trumf: token funnet i feltet '{sti}'")
-    api_headers = {
-        "User-Agent": UA,
-        "Accept": "application/json",
-        "Authorization": token if token.lower().startswith("bearer ") else f"Bearer {token}",
-    }
+    transactions = _extract_json_after(html, "transactionsData")
+    if not transactions:
+        print("❌ Ingen transaksjonsdata i Trumf-siden (cookie utløpt?).")
+        raise RuntimeError("ingen Trumf-data i siden")
 
-    i_dag = datetime.date.today()
-    try:
-        res = requests.get(f"{API}/trumf/husstand/transaksjoner", headers=api_headers, timeout=30, params={
-            "felter": FELTER,
-            "fra": (i_dag - datetime.timedelta(days=730)).isoformat(),
-            "til": (i_dag + datetime.timedelta(days=1)).isoformat(),
-            "format": "crm",
-        })
-        if res.status_code >= 400:
-            print(f"❌ Trumf-API svarte {res.status_code}: {res.text[:300]!r}")
-        res.raise_for_status()
-        transaksjoner = res.json()
-    except Exception as e:
-        print(f"❌ Feil ved henting av Trumf-data: {e}")
-        raise
-    print(f"   Trumf: {len(transaksjoner)} handleturer, felter: {_feltnavn(transaksjoner)[:15]}")
+    print(f"   Trumf: {len(transactions)} handleturer")
 
     receipts = []
-    for t in transaksjoner:
-        batch_id = str(t["batchid"])
-        kvittering = {
-            "date": _dato(t),
+    for t in transactions:
+        batch_id = str(t.get("batchId", ""))
+        date_str = str(t.get("transaksjonsTidspunkt", ""))[:10]
+        if not batch_id or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
+            continue
+        if t.get("harKvittering") is False:
+            continue
+
+        receipt = {
+            "date": date_str,
             "payee": t.get("beskrivelse", "Trumf"),
             "amount": float(t.get("belop", 0)),
             "batch_id": batch_id,
         }
         if batch_id in skip_ids:
-            receipts.append({**kvittering, "items": [], "is_skipped": True})
+            receipts.append({**receipt, "items": [], "is_skipped": True})
             continue
-        receipts.append({**kvittering, "items": fetch_trumf_items(batch_id, api_headers), "is_skipped": False})
+        receipts.append({**receipt, "items": fetch_trumf_items(batch_id, cookie), "is_skipped": False})
         time.sleep(0.5)
     return receipts

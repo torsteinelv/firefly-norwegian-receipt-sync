@@ -130,7 +130,9 @@ def hent_alle_kvitteringer(skip_ids):
             alle.append(r)
     except Exception:
         feilet.append("Trumf")
-    for navn, hent in (("Rema", fetch_rema_data), ("Coop", fetch_coop_data)):
+    # Coop midlertidig ute (Play Integrity-lås på receipt-endpoints, se issue #19).
+    # for navn, hent in (("Rema", fetch_rema_data), ("Coop", fetch_coop_data)):
+    for navn, hent in (("Rema", fetch_rema_data),):
         try:
             alle.extend(hent(skip_ids=skip_ids))
         except Exception:
