@@ -22,7 +22,9 @@ Trumf sitt oppsett var allerede sånn.
 vare. Fjernet - upålitelig nok til at det ikke var verdt kompleksiteten.
 
 Nå: hver vare sjekkes mot (1) Firefly sin egen transaksjonshistorikk (varer
-du/Firefly allerede har kategorisert før), så (2) en lokal cache
+du/Firefly allerede har kategorisert før), så (2) Kassalapp (`KASSALAPP`-nøkkel;
+EAN-oppslag, ellers navnesøk - hovedkategorien brukes, f.eks. "Meieri & egg"),
+så (3) en lokal cache
 (`vare_cache.json`, på PVC-en i k8s). Finnes den ikke i noen av delene,
 sendes IKKE `category_name` med i det hele tatt - transaksjonen opprettes
 med `apply_rules: true`, så **Firefly sitt eget regelverk** kategoriserer
