@@ -3,24 +3,18 @@ import requests
 
 from tokenstore import hent_token, lagre_token
 
-API_BASE = "https://api.coop.no"
+API_BASE = "https://cdcapp.coop.no"
 ISSUER = "https://login.coop.no/"
-# Auth0 sin standard token-endepunkt-konvensjon ({issuer}oauth/token) - IKKE
-# eksplisitt bekreftet mot Coop sin egen APK-dekompilering (kilden ga kun
-# issuer + /.well-known/openid-configuration, ikke selve token-URL-en). Sjekk
-# https://login.coop.no/.well-known/openid-configuration sitt
-# "token_endpoint"-felt hvis dette feiler.
+# Bekreftet via https://login.coop.no/.well-known/openid-configuration
+# (token_endpoint = https://login.coop.no/oauth/token).
 TOKEN_URL = f"{ISSUER}oauth/token"
 
-# Reverse-engineert fra Coop Medlem-appen (Android APK) - se
-# https://helgesver.re/articles/reverse-engineering-norwegian-grocery-apps
-# MERK: Coop bruker BankID (Aera SDK, api.aerahost.com) for Strong Customer
-# Authentication (SCA) ved førstegangs-innlogging - vesentlig tyngre
-# bootstrap enn Trumf/Rema. COOP_REFRESH_TOKEN hentes manuelt med
-# bootstrap_oauth.py (krever ekte BankID-innlogging i nettleser), og det er
-# uklart fra kildematerialet hvor lenge Coop sin refresh_token faktisk
-# lever før SCA må gjøres på nytt - anta at denne må fornyes manuelt oftere
-# enn Trumf/Rema sine til det motsatte er bekreftet.
+# Reverse-engineert fra Coop Medlem-appen (Android APK, v4.32.0):
+# - API-base: https://cdcapp.coop.no (kjøpshistorikk under /user/pay/history/*)
+# - Auth0 PKCE ved login.coop.no; innlogging er vanleg brukarnamn/passord,
+#   IKKE BankID/SCA.
+# COOP_CLIENT_ID er IKKE i appen (sjekket libapp.so) - kjem frå env/secret.
+# COOP_REFRESH_TOKEN hentes manuelt med bootstrap_oauth.py.
 
 
 def _refresh_access_token(refresh_token):
@@ -81,7 +75,7 @@ def fetch_coop_data(skip_ids=None):
         if ny and ny != refresh_token:
             lagre_token("coop", fra_env, ny)
     except Exception as e:
-        print(f"❌ Kunne ikke fornye Coop-token (COOP_REFRESH_TOKEN kan være utløpt, ev. krever ny BankID-SCA - kjør bootstrap_oauth.py på nytt): {e}")
+        print(f"❌ Kunne ikke fornye Coop-token (COOP_REFRESH_TOKEN kan være utløpt - kjør bootstrap_oauth.py på nytt): {e}")
         raise
 
     headers = _headers(access_token)

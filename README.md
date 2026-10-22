@@ -9,7 +9,7 @@ bank-transaksjonene i Firefly III til varelinjer, matchet på beløp+dato.
 |---|---|---|---|
 | Trumf | Kiwi, Meny, Spar | Cookie (manuell) | Fungerer |
 | Rema 1000 | Rema 1000 | OAuth2/PKCE (Æ-appen) | Ny |
-| Coop | Extra, Obs, Mega, Prix | OAuth2/OIDC + BankID SCA | Ny |
+| Coop | Extra, Obs, Mega, Prix | OAuth2/OIDC (PKCE) | Ny |
 
 Rema og Coop sine API-er er reverse-engineert fra de offisielle Android-appene
 (ikke offisielt støttet, kan slutte å virke uten varsel) - se
@@ -37,10 +37,10 @@ det du allerede har i `vare_cache.json`.
 2. Trumf: se den gamle fremgangsmåten (cookie fra innlogget nettleser-sesjon).
 3. Rema: `python bootstrap_oauth.py rema` - logg inn i nettleseren som åpnes,
    lim inn redirect-URL-en, lim `REMA_REFRESH_TOKEN` inn i `.env`.
-4. Coop: samme som Rema, men `python bootstrap_oauth.py coop` - krever
-   BankID. `COOP_CLIENT_ID` må først finnes manuelt (proxy appens trafikk
-   én gang, f.eks. med mitmproxy) - ikke i kildematerialet dette er bygget
-   fra.
+4. Coop: samme som Rema, men `python bootstrap_oauth.py coop` - vanlig
+   brukarnamn/passord (IKKE BankID). `COOP_CLIENT_ID` er IKKE i appen (sjekket
+   `libapp.so` i v4.32.0) - få den én gang ved å proxye appens trafikk
+   (mitmproxy) eller fra Coop, og legg den i `.env`/secret.
 5. `pip install -r requirements.txt && python sync.py` for en manuell test.
 6. I k3s-gitops: kubeseal `.env`-verdiene inn i
    `firefly-receipt-sync-secrets` (samme mønster som i dag, se
@@ -50,8 +50,9 @@ det du allerede har i `vare_cache.json`.
 
 - Rema/Coop sine refresh-tokens har ukjent levetid - hvis synken slutter å
   finne nye kjøp derfra, kjør `bootstrap_oauth.py` på nytt for den kilden.
-- Coop sin BankID-SCA gjør at `COOP_REFRESH_TOKEN` sannsynligvis må fornyes
-  oftere enn de to andre - ikke bekreftet hvor ofte.
-- `bootstrap_oauth.py` sin Coop-redirect (`no.coop.members://auth/callback`)
-  er et mobil-app-scheme - nettleseren viser en feilside etter innlogging,
-  koden må kopieres fra adressefeltet der (se docstring i fila).
+- `COOP_CLIENT_ID` er IKKE i appen (bekreftet ved statisk analyse av `libapp.so`,
+  v4.32.0) - den må fanges én gang via proxy eller fås fra Coop.
+- `bootstrap_oauth.py` sin Coop-redirect
+  (`https://login.coop.no/android/no.coop.members/callback`) er appens
+  registrerte Android-URL: nettleseren viser koden i adressefeltet etter
+  innlogging (se docstring i fila).
