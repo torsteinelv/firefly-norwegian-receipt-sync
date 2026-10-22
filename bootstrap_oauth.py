@@ -121,7 +121,9 @@ def main():
         },
         timeout=10,
     )
-    res.raise_for_status()
+    if not res.ok:
+        print(f"❌ Token-byttet ble avvist ({res.status_code}): {res.text}")
+        sys.exit(1)
     tokens = res.json()
 
     refresh_token = tokens.get("refresh_token")
