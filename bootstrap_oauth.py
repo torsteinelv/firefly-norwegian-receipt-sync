@@ -132,9 +132,32 @@ def main():
         print(tokens)
         sys.exit(1)
 
+    # Auth0 ROTERER refresh-token ved hver token-forespurning: den vi nettopp
+    # fikk (R1) dør så snart vi fornyer med den. Vi VERIFISERER derfor med éin
+    # refresh-grant og beholder den LIVE (post-rotasjon) tokenen (R2) — det er
+    # R2 som skal i secretet, for ellers feiler første sync med invalid_grant.
+    live_token = refresh_token
+    verify = requests.post(
+        cfg["token_url"],
+        data={"grant_type": "refresh_token", "refresh_token": refresh_token,
+              "client_id": cfg["client_id"]},
+        timeout=10,
+    )
+    if verify.status_code == 200:
+        try:
+            vj = verify.json()
+            if vj.get("refresh_token") and vj["refresh_token"] != refresh_token:
+                live_token = vj["refresh_token"]
+        except ValueError:
+            pass
+    else:
+        print(f"⚠️ Verifisering svarte {verify.status_code}: {verify.text[:300]}")
+        print("   Bruker tokenet fra code-byttingen (kan være forbrukt — prøv på nytt om sync feiler).")
+
     env_var = "REMA_REFRESH_TOKEN" if provider == "rema" else "COOP_REFRESH_TOKEN"
-    print(f"\n✅ Suksess! {env_var}=\n\n{refresh_token}\n")
-    print("Legg denne i secret-template.yaml og kubeseal den (se README.md).")
+    print(f"\n✅ Suksess! Token lengde: {len(live_token)}")
+    print(f"\n{live_token}\n")
+    print(f"Sett {env_var} til den teksten over i secret-template.yaml og kubeseal den (se README.md).")
 
 
 if __name__ == "__main__":
